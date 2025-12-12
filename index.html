@@ -241,7 +241,8 @@
   // ✅ Semua request dari browser cuma ke HTTPS Orkut (aman di Vercel)
   const ORKUT_BASE = "https://api-orkut-brown.vercel.app";
 const CREATE_URL = ORKUT_BASE + "/api/createqr";
-const STATUS_URL = (id) => ORKUT_BASE + "/api/status?idTransaksi=" + encodeURIComponent(id);
+const STATUS_URL = (id) =>
+  "https://api-orkut-brown.vercel.app/api/status?idTransaksi=" + encodeURIComponent(id);
   
   document.getElementById("apiText").textContent = CREATE_URL;
   document.getElementById("vpsText").textContent = ORKUT_BASE + "/api/status?idTransaksi=...";
