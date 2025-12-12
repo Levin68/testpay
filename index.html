@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QR Payment</title>
+  <style>
+    :root{
+      --bg1:#0b1020; --bg2:#141a33;
+      --card: rgba(255,255,255,.07);
+      --border: rgba(255,255,255,.12);
+      --text:#eef2ff; --muted:#aab3da;
+      --shadow: 0 22px 70px rgba(0,0,0,.45);
+      --r: 18px;
+      --accent1:#7c5cff; --accent2:#22d3ee;
+      --warn:#f59e0b; --ok:#22c55e; --bad:#ef4444;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; min-height:100vh; color:var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background:
+        radial-gradient(1100px 600px at 20% 10%, rgba(124,92,255,.35), transparent 60%),
+        radial-gradient(900px 520px at 85% 18%, rgba(34,211,238,.25), transparent 55%),
+        radial-gradient(800px 520px at 55% 95%, rgba(34,197,94,.10), transparent 55%),
+        linear-gradient(180deg, var(--bg1), var(--bg2));
+      padding: 26px 14px;
+    }
+    .wrap{max-width: 980px; margin: 0 auto;}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+    .brand{display:flex;align-items:center;gap:12px}
+    .logo{
+      width:44px;height:44px;border-radius:16px;
+      background: linear-gradient(135deg,var(--accent1),var(--accent2));
+      box-shadow: 0 10px 35px rgba(124,92,255,.25);
+    }
+    h1{margin:0;font-size:18px}
+    .sub{margin-top:3px;font-size:12.5px;color:var(--muted)}
+    .pill{
+      display:flex; flex-direction:column; gap:6px;
+      padding: 10px 12px;border-radius:14px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.06);
+      color: var(--muted);
+      font-size:12px;
+      min-width: 360px;
+    }
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+    .grid{display:grid;gap:14px;grid-template-columns: 1.2fr .8fr;}
+    @media(max-width:860px){.grid{grid-template-columns:1fr}}
+    .card{
+      border-radius: var(--r);
+      border: 1px solid var(--border);
+      background: var(--card);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      backdrop-filter: blur(10px);
+    }
+    .hd{
+      padding: 14px 14px 12px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      display:flex;align-items:center;justify-content:space-between;gap:10px
+    }
+    .hd b{font-size:14px}
+    .bd{padding: 14px}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .field{
+      flex: 1 1 240px;
+      border-radius: 14px;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.18);
+    }
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input{
+      width:100%;border:0;outline:0;background:transparent;color:var(--text);
+      font-size:18px;font-weight:800;letter-spacing:.2px;
+    }
+    .hint{margin-top:8px;font-size:12px;color:var(--muted)}
+    .btn{
+      appearance:none;border:0;cursor:pointer;
+      padding: 12px 14px;border-radius: 14px;
+      font-weight:900;color:#06101b;
+      background: linear-gradient(135deg,var(--accent1),var(--accent2));
+      box-shadow: 0 10px 30px rgba(34,211,238,.12), 0 10px 30px rgba(124,92,255,.18);
+      transition: transform .08s ease, filter .2s ease;
+      min-width: 170px;
+    }
+    .btn:active{transform: translateY(1px)}
+    .btn[disabled]{opacity:.75;cursor:not-allowed;filter: grayscale(.3) brightness(.85)}
+    .btn-ghost{
+      background: rgba(255,255,255,.07);
+      border: 1px solid rgba(255,255,255,.12);
+      color: var(--text);
+      box-shadow:none;
+      min-width:auto;
+    }
+    .badge{
+      display:inline-flex;align-items:center;gap:8px;
+      padding: 8px 10px;border-radius:999px;
+      border: 1px solid rgba(255,255,255,.14);
+      font-size:12px;font-weight:950;
+      background: rgba(255,255,255,.06);
+    }
+    .dot{width:10px;height:10px;border-radius:50%;background:#94a3b8; box-shadow:0 0 0 8px rgba(148,163,184,.12)}
+    .kv{
+      display:flex;justify-content:space-between;gap:10px;
+      padding: 10px 12px;border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.04);
+      margin-top: 10px;
+    }
+    .small{font-size:12px;color:var(--muted)}
+    .stateBox{
+      border-radius: 16px;
+      border: 1px dashed rgba(255,255,255,.16);
+      background: rgba(255,255,255,.04);
+      padding: 14px;
+      min-height: 330px;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap: 12px;
+      position:relative;
+      overflow:hidden;
+    }
+    .qrImg{
+      width: 260px; max-width: 100%;
+      border-radius: 18px;
+      background:#fff;
+      padding: 10px;
+      box-shadow: 0 18px 50px rgba(0,0,0,.35);
+    }
+    .bigStatus{
+      width:100%;
+      display:flex;align-items:center;justify-content:center;gap:10px;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.20);
+      font-weight: 950;
+      letter-spacing:.3px;
+      text-align:center;
+    }
+    .spin{
+      width:14px;height:14px;border-radius:50%;
+      border:2px solid rgba(255,255,255,.25);
+      border-top-color: rgba(255,255,255,.92);
+      animation: s 1s linear infinite;
+    }
+    @keyframes s{to{transform:rotate(360deg)}}
+    .glowPaid::before{
+      content:"";
+      position:absolute;inset:-40%;
+      background: radial-gradient(circle at 50% 50%, rgba(34,197,94,.22), transparent 55%);
+      filter: blur(8px);
+    }
+    pre{
+      margin-top:10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 12px;
+      color:#cdd6ff;
+      background: rgba(0,0,0,.25);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      padding: 12px;
+      max-height: 210px;
+      overflow:auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <h1>QR Payment</h1>
+          <div class="sub">Create QR → tampilkan QR → polling status otomatis</div>
+        </div>
+      </div>
+      <div class="pill">
+        <div>CREATE API: <span class="mono" id="apiText"></span></div>
+        <div>STATUS API: <span class="mono" id="statusText"></span></div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="hd">
+          <b>Buat Pembayaran</b>
+          <span class="badge" id="badge"><span class="dot" id="bDot"></span><span id="bText">IDLE</span></span>
+        </div>
+        <div class="bd">
+          <div class="row">
+            <div class="field">
+              <label>Nominal (IDR)</label>
+              <input id="amount" inputmode="numeric" placeholder="Contoh: 10000" />
+              <div class="hint">QR URL diambil dari response <span class="mono">data.qrUrl</span>.</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;min-width:180px;flex:1 1 180px;">
+              <button class="btn" id="btnCreate">Buat QR</button>
+              <button class="btn btn-ghost" id="btnReset" type="button">Reset</button>
+            </div>
+          </div>
+
+          <div class="kv"><div class="small">idTransaksi</div><div class="mono" id="idTx">-</div></div>
+          <div class="kv"><div class="small">createdAt</div><div class="mono" id="createdAt">-</div></div>
+          <div class="kv"><div class="small">expired</div><div class="mono" id="expiredAt">-</div></div>
+          <div class="kv"><div class="small">status</div><div class="mono" id="serverStatus">-</div></div>
+
+          <div class="small" style="margin-top:10px;">Debug JSON (createqr)</div>
+          <pre id="debug">{}</pre>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hd">
+          <b>QR & Status</b>
+          <button class="btn btn-ghost" id="btnCopy" type="button" disabled>Copy ID</button>
+        </div>
+        <div class="bd">
+          <div class="stateBox" id="stateBox">
+            <div class="small">QR akan muncul di sini</div>
+          </div>
+          <div class="small" style="margin-top:10px" id="pollInfo">Polling: OFF</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ✅ FINAL ENDPOINT (FULL URL, biar gak 404 / gak ngarah ke domain frontend)
+  const CREATE_URL = "https://api-orkut-brown.vercel.app/api/createqr";
+  const STATUS_URL = (id) =>
+    "https://api-orkut-brown.vercel.app/api/status?idTransaksi=" + encodeURIComponent(id);
+
+  document.getElementById("apiText").textContent = CREATE_URL;
+  document.getElementById("statusText").textContent = "…/api/status?idTransaksi=<id>";
+
+  const elAmount = document.getElementById("amount");
+  const btnCreate = document.getElementById("btnCreate");
+  const btnReset = document.getElementById("btnReset");
+  const btnCopy = document.getElementById("btnCopy");
+
+  const bText = document.getElementById("bText");
+  const bDot  = document.getElementById("bDot");
+
+  const idTx = document.getElementById("idTx");
+  const createdAtEl = document.getElementById("createdAt");
+  const expiredAtEl = document.getElementById("expiredAt");
+  const serverStatusEl = document.getElementById("serverStatus");
+
+  const debugEl = document.getElementById("debug");
+  const stateBox = document.getElementById("stateBox");
+  const pollInfo = document.getElementById("pollInfo");
+
+  let current = null; // { idTransaksi, amount, createdAt, expired, qrUrl }
+  let pollTimer = null;
+
+  function setDebug(obj){ debugEl.textContent = JSON.stringify(obj ?? {}, null, 2); }
+
+  function setBadgeState(kind){
+    const map = {
+      idle:   { text:"IDLE",    dot:"#94a3b8", ring:"rgba(148,163,184,.12)" },
+      pending:{ text:"PENDING", dot:"var(--warn)", ring:"rgba(245,158,11,.14)" },
+      paid:   { text:"PAID",    dot:"var(--ok)",   ring:"rgba(34,197,94,.15)" },
+      expired:{ text:"EXPIRED", dot:"var(--bad)",  ring:"rgba(239,68,68,.12)" },
+      error:  { text:"ERROR",   dot:"#fb7185",     ring:"rgba(251,113,133,.14)" },
+    };
+    const x = map[kind] || map.idle;
+    bText.textContent = x.text;
+    bDot.style.background = x.dot;
+    bDot.style.boxShadow = `0 0 0 8px ${x.ring}`;
+  }
+
+  function stopPolling(){
+    if (pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+    pollInfo.textContent = "Polling: OFF";
+  }
+
+  function showPendingUI(qrUrl){
+    stateBox.classList.remove("glowPaid");
+    stateBox.innerHTML = `
+      <div class="bigStatus"><div class="spin"></div><div>Menunggu Pembayaran…</div></div>
+      ${qrUrl ? `<img class="qrImg" src="${qrUrl}" alt="QR Payment">` : `<div class="small">QR URL kosong</div>`}
+      <div class="small">Scan QR di atas untuk bayar.</div>
+    `;
+  }
+
+  function showPaidUI(qrUrl){
+    stateBox.classList.add("glowPaid");
+    stateBox.innerHTML = `
+      <div class="bigStatus" style="border-color: rgba(34,197,94,.35); background: rgba(34,197,94,.12);">
+        <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 10px rgba(34,197,94,.15)"></span>
+        <div>PEMBAYARAN BERHASIL ✅</div>
+      </div>
+      ${qrUrl ? `<img class="qrImg" src="${qrUrl}" alt="QR Payment">` : ``}
+      <div class="small">Status sudah PAID. Buat transaksi baru kalau perlu.</div>
+      <button class="btn" style="min-width:220px" onclick="document.getElementById('btnReset').click()">Buat Transaksi Baru</button>
+    `;
+  }
+
+  function showExpiredUI(qrUrl){
+    stateBox.classList.remove("glowPaid");
+    stateBox.innerHTML = `
+      <div class="bigStatus" style="border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.10);">
+        <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 10px rgba(239,68,68,.12)"></span>
+        <div>TRANSAKSI EXPIRED ⛔</div>
+      </div>
+      ${qrUrl ? `<img class="qrImg" src="${qrUrl}" alt="QR Payment">` : ``}
+      <div class="small">Timeout lewat. Buat QR baru.</div>
+      <button class="btn" style="min-width:220px" onclick="document.getElementById('btnReset').click()">Buat Lagi</button>
+    `;
+  }
+
+  function withTimeout(ms){
+    const controller = new AbortController();
+    const t = setTimeout(()=>controller.abort(), ms);
+    return { controller, done: ()=>clearTimeout(t) };
+  }
+
+  async function postJSON(url, body, timeoutMs=15000){
+    const { controller, done } = withTimeout(timeoutMs);
+    try{
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      const txt = await res.text();
+      let data;
+      try{ data = JSON.parse(txt); } catch { data = { raw: txt }; }
+      if (!res.ok) throw new Error(data?.error || data?.message || ("HTTP "+res.status));
+      return data;
+    } finally { done(); }
+  }
+
+  async function getJSON(url, timeoutMs=10000){
+    const { controller, done } = withTimeout(timeoutMs);
+    try{
+      const res = await fetch(url, { signal: controller.signal });
+      const txt = await res.text();
+      let data;
+      try{ data = JSON.parse(txt); } catch { data = { raw: txt }; }
+      if (!res.ok) throw new Error(data?.error || data?.message || ("HTTP "+res.status));
+      return data;
+    } finally { done(); }
+  }
+
+  function startStatusPolling(){
+    stopPolling();
+    if (!current?.idTransaksi) return;
+
+    pollInfo.textContent = "Polling: ON (status tiap 2 detik)";
+    pollTimer = setInterval(async () => {
+      try{
+        const st = await getJSON(STATUS_URL(current.idTransaksi));
+        serverStatusEl.textContent = st.status || "-";
+
+        if (st.status === "paid"){
+          setBadgeState("paid");
+          showPaidUI(current.qrUrl);
+          stopPolling();
+          return;
+        }
+        if (st.status === "expired"){
+          setBadgeState("expired");
+          showExpiredUI(current.qrUrl);
+          stopPolling();
+          return;
+        }
+        setBadgeState("pending");
+      }catch(e){
+        // kalau status endpoint lagi error sesaat, tetap pending & lanjut polling
+        setBadgeState("pending");
+      }
+    }, 2000);
+  }
+
+  function resetAll(){
+    stopPolling();
+    current = null;
+    btnCreate.disabled = false;
+    btnCopy.disabled = true;
+
+    setBadgeState("idle");
+    idTx.textContent = "-";
+    createdAtEl.textContent = "-";
+    expiredAtEl.textContent = "-";
+    serverStatusEl.textContent = "-";
+    setDebug({});
+
+    stateBox.classList.remove("glowPaid");
+    stateBox.innerHTML = `<div class="small">QR akan muncul di sini</div>`;
+  }
+
+  btnReset.addEventListener("click", resetAll);
+
+  btnCopy.addEventListener("click", async () => {
+    if (!current?.idTransaksi) return;
+    try{ await navigator.clipboard.writeText(current.idTransaksi); } catch {}
+  });
+
+  btnCreate.addEventListener("click", async () => {
+    const raw = (elAmount.value || "").replace(/[^\d]/g,"");
+    const amount = Number(raw);
+    if (!amount || amount <= 0){ alert("Nominal harus > 0"); return; }
+
+    btnCreate.disabled = true;
+    stopPolling();
+    setBadgeState("pending");
+    setDebug({});
+
+    stateBox.innerHTML = `<div class="bigStatus"><div class="spin"></div><div>Generating QR…</div></div><div class="small">Meminta QR ke API…</div>`;
+
+    try{
+      // 1) CREATE (API ini juga yang nge-trigger watcher VPS di belakang)
+      const resp = await postJSON(CREATE_URL, { amount });
+      setDebug(resp);
+
+      const data = resp?.data;
+      if (!resp?.success || !data) throw new Error("Response createqr tidak sesuai (missing success/data).");
+
+      const idTransaksi = data.idTransaksi;
+      const createdAt = data.createdAt;
+      const expired = data.expired || null;
+      const qrUrl = data.qrUrl;
+
+      if (!idTransaksi || !createdAt || !qrUrl) throw new Error("createqr missing idTransaksi/createdAt/qrUrl.");
+
+      current = { idTransaksi, amount: Number(data.amount ?? amount), createdAt, expired, qrUrl };
+
+      idTx.textContent = idTransaksi;
+      createdAtEl.textContent = createdAt;
+      expiredAtEl.textContent = expired || "-";
+      serverStatusEl.textContent = "pending";
+      btnCopy.disabled = false;
+
+      showPendingUI(qrUrl);
+
+      // 2) Poll status (dari API status)
+      startStatusPolling();
+
+    }catch(err){
+      setBadgeState("error");
+      stateBox.innerHTML = `
+        <div class="bigStatus" style="border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.10);">
+          <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 10px rgba(239,68,68,.12)"></span>
+          <div>GAGAL BUAT QR</div>
+        </div>
+        <div class="small">${String(err.message || err)}</div>
+        <button class="btn" style="min-width:220px" onclick="document.getElementById('btnReset').click()">Coba Lagi</button>
+      `;
+      btnCreate.disabled = false;
+    }
+  });
+
+  resetAll();
+</script>
+</body>
+</html>
