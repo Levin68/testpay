@@ -184,12 +184,12 @@
         <div class="logo"></div>
         <div>
           <h1>QR Payment</h1>
-          <div class="sub">Create QR → baca <span class="mono">data.qrUrl</span> → watcher VPS update status</div>
+          <div class="sub">Create QR → baca <span class="mono">data.qrUrl</span> → status auto berubah tanpa refresh</div>
         </div>
       </div>
       <div class="pill">
-        <div>CREATE API: <span class="mono" id="apiText"></span></div>
-        <div>WATCHER VPS: <span class="mono" id="vpsText"></span></div>
+        <div>CREATE (VPS): <span class="mono" id="apiText"></span></div>
+        <div>STATUS (VPS): <span class="mono" id="vpsText"></span></div>
       </div>
     </div>
 
@@ -238,19 +238,13 @@
   </div>
 
 <script>
-  // ✅ BENER SESUAI KAMU:
-  // - createqr dari ORKUT BROWN
-  // - qrUrl bisa domain zenitsu (langsung dipakai)
-  // - watcher/status dari VPS
-  const CREATE_BASE = "https://api-orkut-brown.vercel.app";
-  const VPS_BASE    = "http://82.27.2.229:5021";
+  // Endpoint VPS (relative) — harus dibuka dari VPS: http://82.27.2.229:5021/
+  const EP_CREATE = "/createqr";
+  const EP_STATUS = (id) => "/status/" + encodeURIComponent(id);
 
-  const EP_CREATE = CREATE_BASE.replace(/\/+$/,'') + "/api/createqr";
-  const EP_WATCH  = VPS_BASE.replace(/\/+$/,'') + "/watch-payment";
-  const EP_STATUS = (id) => VPS_BASE.replace(/\/+$/,'') + "/status/" + encodeURIComponent(id);
-
-  document.getElementById("apiText").textContent = EP_CREATE;
-  document.getElementById("vpsText").textContent = VPS_BASE;
+  // Tampilkan endpoint sebenarnya (biar jelas)
+  document.getElementById("apiText").textContent = location.origin + EP_CREATE;
+  document.getElementById("vpsText").textContent = location.origin + "/status/:idTransaksi";
 
   const elAmount = document.getElementById("amount");
   const btnCreate = document.getElementById("btnCreate");
@@ -267,6 +261,229 @@
 
   const debugEl = document.getElementById("debug");
   const stateBox = document.getElementById("stateBox");
+  const pollInfo = document.getElementById("pollInfo");
+
+  let current = null; // { idTransaksi, amount, createdAt, expired, qrUrl }
+  let pollTimer = null;
+
+  function setDebug(obj){ debugEl.textContent = JSON.stringify(obj ?? {}, null, 2); }
+
+  function setBadgeState(kind){
+    const map = {
+      idle:   { text:"IDLE",    dot:"#94a3b8", ring:"rgba(148,163,184,.12)" },
+      pending:{ text:"PENDING", dot:"var(--warn)", ring:"rgba(245,158,11,.14)" },
+      paid:   { text:"PAID",    dot:"var(--ok)",   ring:"rgba(34,197,94,.15)" },
+      expired:{ text:"EXPIRED", dot:"var(--bad)",  ring:"rgba(239,68,68,.12)" },
+      error:  { text:"ERROR",   dot:"#fb7185",     ring:"rgba(251,113,133,.14)" },
+    };
+    const x = map[kind] || map.idle;
+    bText.textContent = x.text;
+    bDot.style.background = x.dot;
+    bDot.style.boxShadow = `0 0 0 8px ${x.ring}`;
+  }
+
+  function stopPolling(){
+    if (pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+    pollInfo.textContent = "Polling: OFF";
+  }
+
+  function showPendingUI(qrUrl){
+    stateBox.classList.remove("glowPaid");
+    stateBox.innerHTML = `
+      <div class="bigStatus"><div class="spin"></div><div>Menunggu Pembayaran…</div></div>
+      ${qrUrl ? `<img class="qrImg" src="${qrUrl}" alt="QR Payment">` : `<div class="small">QR URL kosong</div>`}
+      <div class="small">Scan QR di atas untuk bayar.</div>
+    `;
+  }
+
+  function spawnConfetti(){
+    const c = document.createElement("div");
+    c.className = "confetti show";
+    for (let i=0;i<22;i++){
+      const p = document.createElement("i");
+      p.style.left = (Math.random()*100) + "%";
+      p.style.background = Math.random() > 0.5 ? "rgba(34,197,94,.95)" : "rgba(34,211,238,.95)";
+      p.style.animationDelay = (Math.random()*0.2) + "s";
+      c.appendChild(p);
+    }
+    stateBox.appendChild(c);
+    setTimeout(()=>c.remove(), 2000);
+  }
+
+  function showPaidUI(qrUrl){
+    stateBox.classList.add("glowPaid");
+    stateBox.innerHTML = `
+      <div class="bigStatus" style="border-color: rgba(34,197,94,.35); background: rgba(34,197,94,.12);">
+        <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 10px rgba(34,197,94,.15)"></span>
+        <div>PEMBAYARAN BERHASIL ✅</div>
+      </div>
+      ${qrUrl ? `<img class="qrImg" src="${qrUrl}" alt="QR Payment">` : ``}
+      <div class="small">Status sudah PAID.</div>
+      <button class="btn" style="min-width:220px" onclick="document.getElementById('btnReset').click()">Buat Transaksi Baru</button>
+    `;
+    spawnConfetti();
+  }
+
+  function showExpiredUI(qrUrl){
+    stateBox.classList.remove("glowPaid");
+    stateBox.innerHTML = `
+      <div class="bigStatus" style="border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.10);">
+        <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 10px rgba(239,68,68,.12)"></span>
+        <div>TRANSAKSI EXPIRED ⛔</div>
+      </div>
+      ${qrUrl ? `<img class="qrImg" src="${qrUrl}" alt="QR Payment">` : ``}
+      <div class="small">Timeout lewat. Buat QR baru.</div>
+      <button class="btn" style="min-width:220px" onclick="document.getElementById('btnReset').click()">Buat Lagi</button>
+    `;
+  }
+
+  function withTimeout(ms){
+    const controller = new AbortController();
+    const t = setTimeout(()=>controller.abort(), ms);
+    return { controller, done: ()=>clearTimeout(t) };
+  }
+
+  async function postJSON(url, body, timeoutMs=12000){
+    const { controller, done } = withTimeout(timeoutMs);
+    try{
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      const txt = await res.text();
+      let data;
+      try{ data = JSON.parse(txt); } catch { data = { raw: txt }; }
+      if (!res.ok) throw new Error(data?.error || data?.message || ("HTTP "+res.status));
+      return data;
+    } finally { done(); }
+  }
+
+  async function getJSON(url, timeoutMs=8000){
+    const { controller, done } = withTimeout(timeoutMs);
+    try{
+      const res = await fetch(url, { signal: controller.signal });
+      const txt = await res.text();
+      let data;
+      try{ data = JSON.parse(txt); } catch { data = { raw: txt }; }
+      if (!res.ok) throw new Error(data?.error || data?.message || ("HTTP "+res.status));
+      return data;
+    } finally { done(); }
+  }
+
+  function startStatusPolling(){
+    stopPolling();
+    if (!current?.idTransaksi) return;
+
+    pollInfo.textContent = "Polling: ON (status tiap 2 detik)";
+    pollTimer = setInterval(async () => {
+      try{
+        const st = await getJSON(EP_STATUS(current.idTransaksi));
+        serverStatusEl.textContent = st.status || "-";
+
+        if (st.status === "paid"){
+          setBadgeState("paid");
+          showPaidUI(current.qrUrl);
+          stopPolling();
+          return;
+        }
+        if (st.status === "expired"){
+          setBadgeState("expired");
+          showExpiredUI(current.qrUrl);
+          stopPolling();
+          return;
+        }
+        setBadgeState("pending");
+      }catch(e){
+        // kalau error polling, tetap pending (biasanya jaringan)
+        setBadgeState("pending");
+      }
+    }, 2000);
+  }
+
+  function resetAll(){
+    stopPolling();
+    current = null;
+    btnCreate.disabled = false;
+    btnCopy.disabled = true;
+
+    setBadgeState("idle");
+    idTx.textContent = "-";
+    createdAtEl.textContent = "-";
+    expiredAtEl.textContent = "-";
+    serverStatusEl.textContent = "-";
+    setDebug({});
+
+    stateBox.classList.remove("glowPaid");
+    stateBox.innerHTML = `<div class="small">QR akan muncul di sini</div>`;
+  }
+
+  btnReset.addEventListener("click", resetAll);
+
+  btnCopy.addEventListener("click", async () => {
+    if (!current?.idTransaksi) return;
+    try{ await navigator.clipboard.writeText(current.idTransaksi); } catch {}
+  });
+
+  btnCreate.addEventListener("click", async () => {
+    const raw = (elAmount.value || "").replace(/[^\d]/g,"");
+    const amount = Number(raw);
+    if (!amount || amount <= 0){ alert("Nominal harus > 0"); return; }
+
+    btnCreate.disabled = true;
+    stopPolling();
+    setBadgeState("pending");
+    setDebug({});
+
+    stateBox.innerHTML = `<div class="bigStatus"><div class="spin"></div><div>Generating QR…</div></div><div class="small">Meminta QR ke VPS…</div>`;
+
+    try{
+      // CREATE lewat VPS (VPS akan call Orkut + auto start watcher)
+      const resp = await postJSON(EP_CREATE, { amount });
+      setDebug(resp);
+
+      const data = resp?.data;
+      if (!resp?.success || !data) throw new Error("Response createqr tidak sesuai (missing success/data).");
+
+      const idTransaksi = data.idTransaksi;
+      const createdAt = data.createdAt;
+      const expired = data.expired || null;
+      const qrUrl = data.qrUrl;
+
+      if (!idTransaksi || !createdAt || !qrUrl) throw new Error("createqr missing idTransaksi/createdAt/qrUrl.");
+
+      current = { idTransaksi, amount: Number(data.amount ?? amount), createdAt, expired, qrUrl };
+
+      idTx.textContent = idTransaksi;
+      createdAtEl.textContent = createdAt;
+      expiredAtEl.textContent = expired || "-";
+      serverStatusEl.textContent = "pending";
+      btnCopy.disabled = false;
+
+      showPendingUI(qrUrl);
+
+      // Poll status dari VPS tanpa refresh
+      startStatusPolling();
+
+    }catch(err){
+      setBadgeState("error");
+      stateBox.innerHTML = `
+        <div class="bigStatus" style="border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.10);">
+          <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 10px rgba(239,68,68,.12)"></span>
+          <div>GAGAL BUAT QR</div>
+        </div>
+        <div class="small">${String(err.message || err)}</div>
+        <button class="btn" style="min-width:220px" onclick="document.getElementById('btnReset').click()">Coba Lagi</button>
+      `;
+      btnCreate.disabled = false;
+    }
+  });
+
+  resetAll();
+</script>
+</body>
+</html>tateBox = document.getElementById("stateBox");
   const pollInfo = document.getElementById("pollInfo");
 
   let current = null; // { idTransaksi, amount, createdAt, expired, qrUrl }
